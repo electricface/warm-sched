@@ -39,6 +39,7 @@ static int show_proc_content(struct seq_file *filp, void *p)
     bs = root.mnt->mnt_sb;
     path_put(&root);
 
+
     if (is_normal_fs_type(bs)) {
         traver_sb(filp, bs, 0);
         return 0;
@@ -52,12 +53,13 @@ static int proc_open_callback(struct inode *inode, struct file *filp)
     return single_open(filp, show_proc_content, 0);
 }
 
-static const struct file_operations proc_file_fops = {
-    .owner = THIS_MODULE,
-    .open = proc_open_callback,
-    .read	= seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
+// static const struct file_operations proc_file_fops = {
+static const struct proc_ops proc_file_fops = {
+    .proc_flags = PROC_ENTRY_PERMANENT,
+    .proc_open = proc_open_callback,
+    .proc_read	= seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
 };
 
 static void traver_sb(struct seq_file* sf, struct super_block *sb, void *user_data)
@@ -109,7 +111,7 @@ static bool skip_inode(struct inode* inode)
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 17, 0)
 #define i_pages page_tree
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 #error "KERNEL VERSION 5.1+ hasn't been supported."
 #else
 #define i_pages i_pages
@@ -117,6 +119,7 @@ static bool skip_inode(struct inode* inode)
 
 static void dump_mapping(struct seq_file*sf, unsigned long total, struct address_space* addr)
 {
+#if 0
     void **slot;
     struct radix_tree_iter iter;
 
@@ -166,6 +169,9 @@ static void dump_mapping(struct seq_file*sf, unsigned long total, struct address
         seq_printf(sf, " ERROR3 (%ld != %ld) ", debug2, addr->nrpages);
     }
 #endif
+#else
+	seq_printf(sf, "[%ld:%ld],", 0, total - 1);
+#endif
 }
 
 static bool dump_inode(struct seq_file* sf, struct inode *inode)
@@ -177,6 +183,7 @@ static bool dump_inode(struct seq_file* sf, struct inode *inode)
     loff_t fs = i_size_read(inode);
     unsigned long nrpages = inode->i_mapping->nrpages;
     unsigned long total = (fs + PAGE_SIZE - 1) / PAGE_SIZE;
+
     if (fs == 0) {
         return false;
     }
@@ -189,14 +196,20 @@ static bool dump_inode(struct seq_file* sf, struct inode *inode)
         return false;
     }
 
+
     d = d_find_any_alias(inode);
     if (d == 0) {
         return false;
-    }
+	}
+
     tmpname = dentry_path_raw(d, bufname, sizeof(bufname));
     dput(d);
 
-    bn = bmap(inode, 0);
+
+    if (bmap(inode, &bn)) {
+		return false;
+	}
+
 
     seq_printf(sf, "%ld\t%ld\t", bn, total);
 
